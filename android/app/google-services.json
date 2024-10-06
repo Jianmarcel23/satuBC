@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "621097076279",
+    "project_id": "djbc-30a88",
+    "storage_bucket": "djbc-30a88.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:621097076279:android:41f850ec9bbd314683a1b2",
+        "android_client_info": {
+          "package_name": "com.example.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBqrePCtJm3Okxag-yrK6mKKsp3X7chTxA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

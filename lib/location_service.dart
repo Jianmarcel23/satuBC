@@ -1,8 +1,8 @@
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
-  static const double allowedLatitude = 3.7660435104353476;
-  static const double allowedLongitude = 98.68209301040406;
+  static const double allowedLatitude = 3.7827216033710087;
+  static const double allowedLongitude = 98.68614516429746;
   static const double defaultAllowedDistance = 150.0;
 
   final List<Position> _lastPositions = [];

@@ -1,109 +1,132 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'auth_service.dart';
 
+/// Layanan untuk mengelola absensi pegawai menggunakan Firestore.
 class AttendanceService {
+  final AuthService _authService;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Function to mark attendance
-  Future<void> markAttendance(String nip, String activity) async {
+  AttendanceService(this._authService);
+
+  /// Menandai absensi pegawai.
+  ///
+  /// [employeeId] adalah ID unik pegawai.
+  /// [activity] adalah jenis aktivitas absensi (misalnya: masuk, istirahat, pulang).
+  ///
+  /// Metode ini akan membuat atau memperbarui dokumen absensi untuk hari ini
+  /// di dalam koleksi 'attendance/{employeeId}/daily_records/'.
+  Future<void> markAttendance(String employeeId, String activity) async {
     try {
-      DateTime now = DateTime.now();
-      String formattedDate =
-          "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}"; // YYYY-MM-DD format
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
 
-      // Get the employee document based on NIP
-      QuerySnapshot<Map<String, dynamic>> result = await _firestore
-          .collection('employees')
-          .where('NIP', isEqualTo: nip)
-          .get();
+      DocumentReference employeeAttendanceRef = _firestore
+          .collection('attendance')
+          .doc(employeeId)
+          .collection('daily_records')
+          .doc(today.toIso8601String());
 
-      if (result.docs.isNotEmpty) {
-        String employeeId = result.docs.first.id;
+      await _firestore.runTransaction((transaction) async {
+        DocumentSnapshot attendanceSnapshot =
+            await transaction.get(employeeAttendanceRef);
 
-        // Store attendance data under 'attendance' subcollection, grouped by date
-        await _firestore
-            .collection('employees')
-            .doc(employeeId)
-            .collection('attendance')
-            .doc(formattedDate) // Document for the specific date
-            .collection(
-                'activities') // Subcollection for activities within the date
-            .add({
-          'activity': activity,
-          'timestamp': now,
-        });
-
-        print('Attendance marked for $activity');
-      } else {
-        print('No employee found with this NIP');
-      }
-    } catch (e) {
-      print('Error in markAttendance: ${e.toString()}');
-    }
-  }
-
-  // Function to get the last attendance activity of an employee
-  Future<String?> getLastActivity(String nip) async {
-    try {
-      QuerySnapshot<Map<String, dynamic>> result = await _firestore
-          .collection('employees')
-          .where('NIP', isEqualTo: nip)
-          .get();
-
-      if (result.docs.isNotEmpty) {
-        String employeeId = result.docs.first.id;
-
-        // Fetch the last activity based on the timestamp in descending order
-        var attendanceSnapshot = await _firestore
-            .collection('employees')
-            .doc(employeeId)
-            .collection('attendance')
-            .orderBy('timestamp', descending: true)
-            .limit(1)
-            .get();
-
-        if (attendanceSnapshot.docs.isNotEmpty) {
-          return attendanceSnapshot.docs.first.data()['activity'] as String?;
+        if (!attendanceSnapshot.exists) {
+          // Jika dokumen untuk hari ini belum ada, buat baru
+          transaction.set(employeeAttendanceRef, {
+            'date': today,
+            'activities': [
+              {
+                'type': activity,
+                'timestamp': now,
+              }
+            ]
+          });
+        } else {
+          // Jika dokumen sudah ada, tambahkan aktivitas baru
+          List<dynamic> activities = (attendanceSnapshot.data()
+                  as Map<String, dynamic>)['activities'] ??
+              [];
+          activities.add({
+            'type': activity,
+            'timestamp': now,
+          });
+          transaction.update(employeeAttendanceRef, {'activities': activities});
         }
-      }
-      return null;
+      });
+
+      print('Absensi tercatat untuk $activity pada ${today.toIso8601String()}');
     } catch (e) {
-      print('Error in getLastActivity: ${e.toString()}');
-      return null;
+      print('Error dalam markAttendance: $e');
+      rethrow; // Melempar kembali error untuk penanganan di UI
     }
   }
 
-  // Function to retrieve all attendance records for a given day
+  /// Mendapatkan catatan absensi untuk tanggal tertentu.
+  ///
+  /// [employeeId] adalah ID unik pegawai.
+  /// [date] adalah tanggal yang ingin dilihat catatannya.
+  ///
+  /// Mengembalikan List dari Map yang berisi data absensi.
   Future<List<Map<String, dynamic>>> getAttendanceForDate(
-      String nip, DateTime date) async {
+      String employeeId, DateTime date) async {
     try {
-      String formattedDate =
-          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      final targetDate = DateTime(date.year, date.month, date.day);
 
-      QuerySnapshot<Map<String, dynamic>> result = await _firestore
-          .collection('employees')
-          .where('NIP', isEqualTo: nip)
+      DocumentSnapshot attendanceSnapshot = await _firestore
+          .collection('attendance')
+          .doc(employeeId)
+          .collection('daily_records')
+          .doc(targetDate.toIso8601String())
           .get();
 
-      if (result.docs.isNotEmpty) {
-        String employeeId = result.docs.first.id;
-
-        var attendanceSnapshot = await _firestore
-            .collection('employees')
-            .doc(employeeId)
-            .collection('attendance')
-            .doc(formattedDate)
-            .collection('activities')
-            .orderBy('timestamp', descending: true)
-            .get();
-
-        return attendanceSnapshot.docs
-            .map((doc) => doc.data())
-            .toList(); // Return list of attendance records
+      if (attendanceSnapshot.exists) {
+        final data = attendanceSnapshot.data() as Map<String, dynamic>;
+        return List<Map<String, dynamic>>.from(data['activities'] ?? []);
       }
       return [];
     } catch (e) {
-      print('Error in getAttendanceForDate: ${e.toString()}');
+      print('Error dalam getAttendanceForDate: $e');
       return [];
     }
+  }
+
+  /// Mendapatkan riwayat absensi untuk periode tertentu.
+  ///
+  /// [employeeId] adalah ID unik pegawai.
+  /// [startDate] adalah tanggal awal periode yang ingin dilihat.
+  /// [endDate] adalah tanggal akhir periode (opsional, default: hari ini).
+  ///
+  /// Mengembalikan List dari Map yang berisi data riwayat absensi.
+  Future<List<Map<String, dynamic>>> getAttendanceHistory(
+      String employeeId, DateTime startDate, DateTime endDate) async {
+    try {
+      QuerySnapshot attendanceSnapshot = await _firestore
+          .collection('attendance')
+          .doc(employeeId)
+          .collection('daily_records')
+          .where('date', isGreaterThanOrEqualTo: startDate)
+          .where('date', isLessThanOrEqualTo: endDate)
+          .orderBy('date', descending: true)
+          .get();
+
+      return attendanceSnapshot.docs.map((doc) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        return {
+          'date': data['date'],
+          'activities': data['activities'],
+        };
+      }).toList();
+    } catch (e) {
+      print('Error in getAttendanceHistory: $e');
+      return [];
+    }
+  }
+
+  /// Mendapatkan ID pegawai yang sedang login.
+  ///
+  /// Mengembalikan String ID pegawai atau null jika tidak ditemukan.
+  Future<String?> getEmployeeId() async {
+    final userData = await _authService.getCurrentUserData();
+    return userData?['id']; // Asumsi 'id' adalah field untuk ID pegawai
   }
 }

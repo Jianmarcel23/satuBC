@@ -8,27 +8,39 @@ class LandingPage extends StatefulWidget {
 }
 
 class _LandingPageState extends State<LandingPage>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _animation;
+    with TickerProviderStateMixin {
+  late final AnimationController _fadeController;
+  late final AnimationController _slideController;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<Offset> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller =
-        AnimationController(vsync: this, duration: const Duration(seconds: 1));
-    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
-    _controller.forward();
+    _fadeController =
+        AnimationController(vsync: this, duration: const Duration(seconds: 2));
+    _slideController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 500));
 
-    Future.delayed(const Duration(seconds: 3), () {
-      // Navigate to LoginPage after 3 seconds
-      Navigator.pushReplacementNamed(context, '/login');
+    _fadeAnimation =
+        CurvedAnimation(parent: _fadeController, curve: Curves.easeIn);
+    _slideAnimation =
+        Tween<Offset>(begin: Offset.zero, end: const Offset(-1.0, 0.0)).animate(
+            CurvedAnimation(parent: _slideController, curve: Curves.easeInOut));
+
+    _fadeController.forward();
+
+    Future.delayed(const Duration(seconds: 2), () {
+      _slideController.forward().then((_) {
+        Navigator.of(context).pushReplacementNamed('/login');
+      });
     });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _fadeController.dispose();
+    _slideController.dispose();
     super.dispose();
   }
 
@@ -36,29 +48,21 @@ class _LandingPageState extends State<LandingPage>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: AnimatedBuilder(
-          animation: _animation,
-          builder: (context, child) {
-            return Opacity(
-              opacity: _animation.value,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildLogo('assets/bea_cukai.png'),
-                      const SizedBox(width: 20),
-                      Container(width: 3, height: 40, color: Colors.black),
-                      const SizedBox(width: 20),
-                      _buildLogo('assets/kemenkeu.png'),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            );
-          },
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildLogo('assets/bea_cukai.png'),
+                const SizedBox(width: 20),
+                Container(width: 3, height: 40, color: Colors.black),
+                const SizedBox(width: 20),
+                _buildLogo('assets/kemenkeu.png'),
+              ],
+            ),
+          ),
         ),
       ),
     );

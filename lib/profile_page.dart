@@ -67,7 +67,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Column(
                       children: [
                         // Bagian Avatar dan Nama Pegawai
-                        CircleAvatar(
+                        const CircleAvatar(
                           radius: 60,
                           backgroundImage: AssetImage(
                               'assets/profile_pic.png'), // Replace with actual image
